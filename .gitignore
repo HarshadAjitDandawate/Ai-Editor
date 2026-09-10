@@ -1,0 +1,153 @@
+# =========================
+# Environment & Secrets
+# =========================
+API Key.txt
+.env
+.env.*
+!.env.example
+
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+*.so
+
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# =========================
+# Testing / Coverage
+# =========================
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.cache/
+
+# =========================
+# IDE / Editors
+# =========================
+.vscode/
+.idea/
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =========================
+# Logs
+# =========================
+*.log
+logs/
+
+# =========================
+# Temporary files
+# =========================
+*.tmp
+*.temp
+tmp/
+temp/
+
+# =========================
+# AI / Video processing
+# =========================
+uploads/
+output/
+outputs/
+renders/
+rendered/
+cache/
+caches/
+temp_video/
+processed/
+processed_videos/
+
+# Video files
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+
+# Audio files
+*.mp3
+*.wav
+*.aac
+*.m4a
+*.flac
+
+# =========================
+# Generated AI files
+# =========================
+generated/
+generated_videos/
+generated_audio/
+generated_images/
+
+# =========================
+# Databases / Local data
+# =========================
+*.db
+*.sqlite
+*.sqlite3
+
+# =========================
+# Node (if frontend exists)
+# =========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output
+dist/
+build/
+
+
+# Generated analysis results
+analysis_output/
+
+# Generated subtitle/caption files
+*.ass
+*.srt
+
+# Backup files
+*_BACKUP.*
+*.bak
+
+# Generated project/test output
+test_output/
+test_outputs/
