@@ -75,15 +75,18 @@ def update_job(job_id, **kwargs):
 ACTIVE_STATUSES = {"queued", "analyzing", "classifying", "selecting", "planning", "rendering"}
 
 
-def find_active_job_with_name(video_name):
-    """Prevents two jobs with the same video/project name from running
-    at once - they'd overwrite each other's output files mid-render,
-    which silently corrupts or stalls both (this happened once already:
-    a duplicate submission caused two renders to fight over the same
-    output file and appear to hang for hours)."""
+def find_any_active_job():
+    """Global concurrency limit: only ONE job at all, regardless of name,
+    may run at a time. Confirmed necessary on real testing: two DIFFERENT
+    jobs running concurrently (each loading Whisper + OpenCV) exhausted
+    memory on Render's free 512MB single-core tier and silently crashed
+    the whole container (OOM-kill - no error logged, just an abrupt
+    restart with all in-memory job data wiped). This never showed up
+    locally, where there's far more RAM/CPU headroom to run several jobs
+    at once - it's specifically a constraint of this deployment tier."""
     with jobs_lock:
         for job in jobs.values():
-            if job["video_name"] == video_name and job["status"] in ACTIVE_STATUSES:
+            if job["status"] in ACTIVE_STATUSES:
                 return job
     return None
 
@@ -155,13 +158,14 @@ async def create_project_job(files: List[UploadFile] = File(...), project_name: 
     """Upload multiple videos and start the combined multi-clip editing
     pipeline on them - the AI selects the best moments across ALL of
     them and edits them together into one video."""
-    existing = find_active_job_with_name(project_name)
+    existing = find_any_active_job()
     if existing:
         raise HTTPException(
             status_code=409,
-            detail=f"A job for project '{project_name}' is already running "
-                    f"(job_id: {existing['job_id']}, status: {existing['status']}). "
-                    f"Wait for it to finish, or use a different project_name."
+            detail=f"Another job is already running (job_id: {existing['job_id']}, "
+                    f"video: '{existing['video_name']}', status: {existing['status']}). "
+                    f"This deployment only supports one job at a time due to limited "
+                    f"server resources - wait for it to finish before submitting another."
         )
 
     job_id = str(uuid.uuid4())
@@ -198,13 +202,14 @@ async def create_job(file: UploadFile = File(...), target_format: Optional[str] 
     target_format: optional 'shorts' or 'long', if the user already knows
     which they want (otherwise the AI decides in Phase 2)."""
     video_name = Path(file.filename).stem
-    existing = find_active_job_with_name(video_name)
+    existing = find_any_active_job()
     if existing:
         raise HTTPException(
             status_code=409,
-            detail=f"A job for '{video_name}' is already running "
-                    f"(job_id: {existing['job_id']}, status: {existing['status']}). "
-                    f"Wait for it to finish before submitting again."
+            detail=f"Another job is already running (job_id: {existing['job_id']}, "
+                    f"video: '{existing['video_name']}', status: {existing['status']}). "
+                    f"This deployment only supports one job at a time due to limited "
+                    f"server resources - wait for it to finish before submitting another."
         )
 
     job_id = str(uuid.uuid4())
