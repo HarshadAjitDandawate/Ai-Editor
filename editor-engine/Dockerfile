@@ -16,7 +16,7 @@ RUN useradd -m -u 1000 appuser
 USER appuser
 ENV HOME=/home/appuser \
     PATH=/home/appuser/.local/bin:$PATH \
-    WHISPER_MODEL_SIZE=base
+    WHISPER_MODEL_SIZE=tiny
 
 WORKDIR /home/appuser/app
 
@@ -32,7 +32,7 @@ RUN pip install --user --no-cache-dir -r requirements.txt
 # time, not first request - Render's free tier sleeps after ~15 min of
 # inactivity, so without this every wake-up would redownload the model
 # before the first request could complete.
-RUN python -c "import whisper; whisper.load_model('base')"
+RUN python -c "import whisper; whisper.load_model('tiny')"
 
 COPY --chown=appuser:appuser . .
 
