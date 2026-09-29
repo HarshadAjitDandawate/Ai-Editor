@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+python-multipart
+python-dotenv
+google-genai
+scenedetect
+ffmpeg-python
+opencv-python-headless
+requests

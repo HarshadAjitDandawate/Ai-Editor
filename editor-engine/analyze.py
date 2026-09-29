@@ -14,7 +14,6 @@ import subprocess
 from pathlib import Path
 
 from scenedetect import detect, ContentDetector
-import whisper
 
 
 def get_video_duration(video_path):
@@ -114,7 +113,17 @@ def transcribe_audio(video_path, model_size=None, language="en"):
     detected clearly English audio as Hindi and transcribed everything
     as meaningless phonetic Hindi script. Set to None to auto-detect if
     you're processing genuinely multi-language content.
+
+    TRANSCRIPTION_BACKEND env var controls which engine is used:
+    'local' (default) uses this Whisper code below; 'groq' redirects to
+    transcribe_audio_groq() instead, for deployment on RAM-limited hosts.
     """
+    backend = os.environ.get("TRANSCRIPTION_BACKEND", "local")
+    if backend == "groq":
+        return transcribe_audio_groq(video_path, language=language)
+
+    import whisper
+    
     if model_size is None:
         model_size = os.environ.get("WHISPER_MODEL_SIZE", "medium")
     print(f"Loading Whisper '{model_size}' model (downloads once, then cached)...")
@@ -159,6 +168,90 @@ def transcribe_audio(video_path, model_size=None, language="en"):
     # Whisper sometimes hallucinates empty/zero-duration segments when
     # there's little or no real speech (common on gaming/ambient audio) -
     # filter those out rather than let them clutter downstream steps.
+    segments = [s for s in segments if s["text"] and s["end"] > s["start"]]
+    return segments
+
+def _best_segment_index(word, segments):
+    """
+    Find which segment a word overlaps with the most (by overlapping duration).
+    Groq segment boundaries don't always land exactly on word boundaries, so a
+    strict "word fully inside segment" check silently drops words that straddle
+    two segments. This picks the best-matching segment instead, so no word is lost.
+    """
+    best_idx = 0
+    best_overlap = -1
+    for i, seg in enumerate(segments):
+        overlap = min(word["end"], seg["end"]) - max(word["start"], seg["start"])
+        if overlap > best_overlap:
+            best_overlap = overlap
+            best_idx = i
+    return best_idx
+
+
+def transcribe_audio_groq(video_path, language="en"):
+    """
+    Transcribe speech with word-level timestamps using Groq's hosted Whisper API.
+    Deployment path - avoids loading PyTorch/Whisper locally so it fits in
+    Render's 512MB RAM limit.
+
+    Groq returns a flat "words" array and a flat "segments" array (not nested).
+    We re-nest words into segments by matching time ranges, then apply the
+    SAME hallucination filters as the local path.
+    """
+    import requests
+
+    # Extract audio to mp3 for upload
+    audio_path = Path(video_path).with_suffix(".mp3")
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", str(video_path), "-vn",
+         "-acodec", "libmp3lame", "-q:a", "4", str(audio_path)],
+        capture_output=True, check=True
+    )
+
+    try:
+        with open(audio_path, "rb") as f:
+            response = requests.post(
+                "https://api.groq.com/openai/v1/audio/transcriptions",
+                headers={"Authorization": f"Bearer {os.environ['GROQ_API_KEY']}"},
+                files={"file": (audio_path.name, f, "audio/mpeg")},
+                data={
+                    "model": "whisper-large-v3-turbo",
+                    "language": language,
+                    "response_format": "verbose_json",
+                    "timestamp_granularities[]": ["word", "segment"]
+                },
+                timeout=300
+            )
+        response.raise_for_status()
+        result = response.json()
+    finally:
+        if audio_path.exists():
+            audio_path.unlink()
+
+    # Re-nest words into segments by matching time ranges
+    segments = []
+    for seg in result["segments"]:
+        seg_words = [
+            {"word": w["word"].strip(),
+             "start": round(w["start"], 2),
+             "end": round(w["end"], 2)}
+            for w in result["words"]
+            if _best_segment_index(w, result["segments"]) == result["segments"].index(seg)
+        ]
+
+        # Same hallucination filters as local path
+        if seg.get("no_speech_prob", 0) > 0.6:
+            continue
+        if any((w["end"] - w["start"]) > 4.0 for w in seg_words):
+            continue
+
+        segments.append({
+            "start": round(seg["start"], 2),
+            "end": round(seg["end"], 2),
+            "text": seg["text"].strip(),
+            "words": seg_words
+        })
+
     segments = [s for s in segments if s["text"] and s["end"] > s["start"]]
     return segments
 

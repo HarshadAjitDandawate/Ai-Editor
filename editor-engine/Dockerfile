@@ -1,13 +1,14 @@
 # Deployment image for the AI video editing API on Render's free tier.
-# Free tier: 512MB RAM, no GPU - nowhere near enough for the 'medium'
-# Whisper model (~1.5GB+). WHISPER_MODEL_SIZE is set to 'base' here to
-# fit within that limit. analyze.py reads this env var automatically -
-# locally (no env var set) it still defaults to 'medium' for full
-# accuracy, since you have the RAM for that on your own PC.
+# Free tier: 512MB RAM, no GPU - local PyTorch/Whisper does not fit in
+# this limit at ANY model size (confirmed by repeated OOM crashes).
+# Transcription on this deployed build uses Groq's hosted Whisper API
+# instead (TRANSCRIPTION_BACKEND=groq) - no torch/whisper installed here
+# at all. Local development on your own PC is unaffected: analyze.py
+# defaults to TRANSCRIPTION_BACKEND=local when that env var isn't set.
 
 FROM python:3.11-slim
 
-# ffmpeg: needed by Whisper (audio extraction) and our own rendering.
+# ffmpeg: needed for audio extraction (for Groq) and our own rendering.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
@@ -16,23 +17,12 @@ RUN useradd -m -u 1000 appuser
 USER appuser
 ENV HOME=/home/appuser \
     PATH=/home/appuser/.local/bin:$PATH \
-    WHISPER_MODEL_SIZE=tiny
+    TRANSCRIPTION_BACKEND=groq
 
 WORKDIR /home/appuser/app
 
-# Install PyTorch CPU-only build FIRST, before requirements.txt - pip
-# would otherwise pull the default GPU build as a transitive dependency
-# of openai-whisper, which is much larger and useless without a GPU.
-RUN pip install --user --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
-
-COPY --chown=appuser:appuser requirements.txt .
-RUN pip install --user --no-cache-dir -r requirements.txt
-
-# Pre-download the (smaller, RAM-appropriate) Whisper model at BUILD
-# time, not first request - Render's free tier sleeps after ~15 min of
-# inactivity, so without this every wake-up would redownload the model
-# before the first request could complete.
-RUN python -c "import whisper; whisper.load_model('tiny')"
+COPY --chown=appuser:appuser requirements-deploy.txt .
+RUN pip install --user --no-cache-dir -r requirements-deploy.txt
 
 COPY --chown=appuser:appuser . .
 
