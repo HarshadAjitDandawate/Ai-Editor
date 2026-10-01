@@ -28,4 +28,5 @@ COPY --chown=appuser:appuser . .
 
 # Render provides the port to bind via the $PORT environment variable -
 # it is NOT fixed like Hugging Face Spaces' port 7860.
+ENV PYTHONUNBUFFERED=1
 CMD uvicorn api_server:app --host 0.0.0.0 --port ${PORT:-8000}
