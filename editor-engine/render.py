@@ -327,7 +327,7 @@ def render_video(video_path, font_path=DEFAULT_FONT):
         "-filter_complex", filter_complex,
         "-map", f"[{v_label}]",
         "-map", f"[{a_label}]",
-        "-c:v", "libx264", "-preset", "medium", "-crf", "20",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-threads", "1",
         "-c:a", "aac", "-b:a", "192k",
         str(output_path)
     ]
